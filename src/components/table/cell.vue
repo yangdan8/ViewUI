@@ -4,10 +4,17 @@
         <template v-if="renderType === 'selection'">
             <Checkbox :value="checked" @click.native.stop="handleClick" @on-change="toggleSelect" :disabled="disabled"></Checkbox>
         </template>
+        <div class="ivu-table-cell-tree-level" v-if="showLevel" :style="treeLevelStyle"></div>
+        <div class="ivu-table-cell-tree" :class="{ 'ivu-table-cell-tree-loading': childrenLoading }" v-if="showChildren" @click.prevent.stop="handleToggleTree">
+            <Icon type="ios-loading" v-if="childrenLoading" class="ivu-load-loop" />
+            <Icon type="ios-add" v-else-if="!childrenExpand" />
+            <Icon type="ios-remove" v-else />
+        </div>
+        <div class="ivu-table-cell-tree ivu-table-cell-tree-empty" v-else-if="showTreeNode"></div>
         <template v-if="renderType === 'html'"><span v-html="row[column.key]"></span></template>
         <template v-if="renderType === 'normal'">
             <template v-if="column.tooltip">
-                <Tooltip transfer :content="row[column.key]" :theme="tableRoot.tooltipTheme" :disabled="!showTooltip" :max-width="300" class="ivu-table-cell-tooltip">
+                <Tooltip transfer :content="row[column.key]" :theme="tableRoot.tooltipTheme" :disabled="!showTooltip && !tooltipShow" :max-width="300" class="ivu-table-cell-tooltip" @on-popper-show="handleTooltipShow" @on-popper-hide="handleTooltipHide">
                     <span ref="content" @mouseenter="handleTooltipIn" @mouseleave="handleTooltipOut" class="ivu-table-cell-tooltip-content">{{ row[column.key] }}</span>
                 </Tooltip>
             </template>
@@ -54,6 +61,12 @@
             fixed: {
                 type: [Boolean, String],
                 default: false
+            },
+            // 是否为 tree 子节点
+            treeNode: Boolean,
+            treeLevel: {
+                type: Number,
+                default: 0
             }
         },
         data () {
@@ -62,6 +75,7 @@
                 uid: -1,
                 context: this.$parent.$parent.$parent.currentContext,
                 showTooltip: false,  // 鼠标滑过overflow文本时，再检查是否需要显示
+                tooltipShow: false
             };
         },
         computed: {
@@ -83,11 +97,52 @@
                         [`${this.prefixCls}-cell-expand-expanded`]: this.expanded
                     }
                 ];
+            },
+            showChildren () {
+                let status = false;
+                if (this.renderType === 'html' || this.renderType === 'normal' || this.renderType === 'render' || this.renderType === 'slot') {
+                    const data = this.row;
+                    if ((data.children && data.children.length) || ('_loading' in data)) {
+                        if (this.column.tree) status = true;
+                    }
+                }
+                return status;
+            },
+            showTreeNode () {
+                let status = false;
+                if (this.renderType === 'html' || this.renderType === 'normal' || this.renderType === 'render' || this.renderType === 'slot') {
+                    if (this.column.tree && this.treeNode) status = true;
+                }
+                return status;
+            },
+            showLevel () {
+                let status = false;
+                if (this.renderType === 'html' || this.renderType === 'normal' || this.renderType === 'render' || this.renderType === 'slot') {
+                    if (this.column.tree && this.treeNode) status = true;
+                }
+                return status;
+            },
+            treeLevelStyle () {
+                return {
+                    'padding-left': this.treeLevel * this.tableRoot.indentSize + 'px'
+                };
+            },
+            childrenExpand () {
+                const data = this.tableRoot.getDataByRowKey(this.row._rowKey);
+                return data._isShowChildren;
+            },
+            childrenLoading () {
+                const data = this.tableRoot.getDataByRowKey(this.row._rowKey);
+                return '_loading' in data && data._loading;
             }
         },
         methods: {
             toggleSelect () {
-                this.$parent.$parent.$parent.toggleSelect(this.index);
+                if (this.treeNode) {
+                    this.$parent.$parent.$parent.toggleSelect(this.index, this.row._rowKey);
+                } else {
+                    this.$parent.$parent.$parent.toggleSelect(this.index);
+                }
             },
             toggleExpand () {
                 this.$parent.$parent.$parent.toggleExpand(this.index);
@@ -101,6 +156,15 @@
             },
             handleTooltipOut () {
                 this.showTooltip = false;
+            },
+            handleTooltipShow () {
+                this.tooltipShow = true;
+            },
+            handleTooltipHide () {
+                this.tooltipShow = false;
+            },
+            handleToggleTree () {
+                this.$parent.$parent.$parent.toggleTree(this.row._rowKey);
             }
         },
         created () {
